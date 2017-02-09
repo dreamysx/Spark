@@ -1,0 +1,4 @@
+This is a Spark program in Python, implementing matrix multiplication with two phase approach.
+You can invoke this program by:
+bin/spark-submit TwoPhase.py mat1.txt mat2.txt output.txt
+Result of matrix multiplication will be written to a new file named output.txt.
