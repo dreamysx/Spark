@@ -1,0 +1,34 @@
+from pyspark import SparkContext 
+from operator import add
+import sys
+
+sc = SparkContext(appName="inf553")
+ma = sc.textFile(sys.argv[1])
+mb = sc.textFile(sys.argv[2])
+
+phase_one_ma = ma.map(lambda x:(x.split(",")[1],"A,"+x.split(",")[0]+","+x.split(",")[2]))
+phase_one_mb = mb.map(lambda x:(x.split(",")[0],"B,"+x.split(",")[1]+","+x.split(",")[2]))
+
+m = phase_one_ma.union(phase_one_mb)
+
+def multi(iterator):
+    ans = []
+    la = {}
+    lb = {}
+    for value in iterator:
+        val = value.split(',')
+        if (val[0]=='A'): la[val[1]] = int(val[2])
+        else: lb[val[1]] = int(val[2])
+    for ak,av in la.items():
+        for bk,bv in lb.items():
+            ans.append(ak+','+bk+','+str(av*bv))
+    return ans
+	
+phase_one_reducer = m.groupByKey().flatMap(lambda (x,y):multi(y)).map(lambda x:(x.split(',')[0]+','+x.split(',')[1],x.split(',')[2]))
+phase_two_mapper = phase_one_reducer.map(lambda(x,y):(x,int(y)))
+phase_two_reducer = phase_two_mapper.reduceByKey(add).collect()
+
+f = open(sys.argv[3], 'w')
+for temp in phase_two_reducer:
+    f.write(str(temp))
+    f.write('\n')
