@@ -1,0 +1,106 @@
+# This program should be invoked by scrpt "python SON.py datasource.txt threshold outputfilename.txt"
+from itertools import combinations
+import sys
+import itertools
+from pyspark import SparkContext 
+from operator import add
+
+sc = SparkContext(appName="inf553")
+file = sc.textFile(sys.argv[1],2) # separated into two chunks by default
+ratio = sys.argv[2]
+
+def apriori(baskets):
+    count = {}
+    fre = []
+    freset = []
+    tNum = 0
+    k = 1
+        
+    bs = []
+    for b in baskets:
+        tNum += 1
+        temp = []
+        for item in b.split(','):
+            temp.append(item)
+            count.setdefault(item,0)
+            count[item] += 1
+        bs.append(temp)
+    
+    sup = tNum * float(ratio)
+    
+    for key in count:
+        if (count[key]>=sup):
+            fre.append([key])
+    freset.append(fre)
+
+    while fre:
+        k += 1
+        count = {}
+        fre.sort()
+
+        for i in range(0, len(fre) - 1):
+            for j in range(i + 1, len(fre)):
+                if cmp(fre[i][0 : k - 2], fre[j][0 : k - 2]) == 0:
+                    check = 0
+                    item = fre[i] + fre[j][k - 2 : ]
+                    for p in combinations(item, k - 1):
+                        if list(p) in fre:
+                            check += 1
+                    if check == k:
+                        count.setdefault(tuple(item), 0)
+                
+        for b in bs:
+            if len(b)>=k:
+                b.sort()
+                for item in combinations(b,k):
+                    if count.has_key(item):
+                        count[item] += 1
+        
+        fre=[]
+        for key in count:
+            if (count[key]>=sup):
+                 fre.append(list(key))
+        if fre:
+            freset.append(fre)
+    yield freset
+
+candidates = file.mapPartitions(apriori).flatMap(lambda x:(x[i] for i in range(0,len(x)))).flatMap(lambda x:(x[i] for i in range(0,len(x)))).map(lambda x: tuple(x)).distinct().collect()
+
+def passTwo(baskets):
+    count = {}
+    for item in candidates:
+        count.setdefault(item, 0)
+    bs = []
+    for b in baskets:
+        temp = []
+        for item in b.split(','):
+            temp.append(item)
+        bs.append(temp)
+    
+    for b in bs:
+        b.sort()
+        for k in range(1,len(b)+1):
+            for item in combinations(b,k):
+                if count.has_key(item):
+                    count[item] += 1
+    
+    for key in count:
+        yield(key,count[key])
+
+temp = file.mapPartitions(passTwo).reduceByKey(add)
+n = file.count()
+res = temp.filter(lambda x:(x[1]>=n*float(ratio))).map(lambda x:list(x[0])).collect()
+
+def trans(l):
+    if len(l)==1: return str(l[0])
+    s = ''
+    for i in range(0,len(l)-1):
+        s = s + str(l[i]) + ','
+    s = s + str(l[-1])
+    return s
+
+f = open(sys.argv[3], 'w')
+for temp in res:
+    t = trans(temp)
+    f.write(t)
+    f.write('\n')
